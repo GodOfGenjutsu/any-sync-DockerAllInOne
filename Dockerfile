@@ -15,11 +15,7 @@ RUN apk add --no-cache \
     perl \
     yq \
     py3-yaml \
-    docker \
-    docker-compose \
-    make \
-    mongodb \
-    redis
+    make
 
 # Set up working directory
 WORKDIR /app
