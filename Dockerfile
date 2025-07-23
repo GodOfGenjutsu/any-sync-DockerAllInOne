@@ -1,39 +1,22 @@
-# syntax=docker/dockerfile:1
+FROM golang:1.22
 
-FROM golang:1.23-alpine AS anyconf-builder
+ARG REPO_DIR=.
 
-# Install required packages
-RUN apk add --no-cache bash yq
-# Install anyconf
-RUN go install github.com/anyproto/any-sync-tools/anyconf@latest
+# git+ssh {{
+RUN apt-get update && apt-get install -y ca-certificates git-core ssh rsync
+RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
+RUN git config --global url.ssh://git@github.com/.insteadOf https://github.com/
+# }}
 
-# -----------------------------------------------
-FROM python:3.11-alpine AS final
-
-# Install required packages
-RUN apk add --no-cache \
-    bash \
-    perl \
-    yq \
-    py3-yaml \
-    make \
-    git
-
-# Set up working directory
 WORKDIR /app
 
-# Copy files from the project
-COPY . .
-COPY --from=anyconf-builder /go/bin/anyconf /usr/local/bin/anyconf
+# download go modules
+COPY ${REPO_DIR}/go.mod ${REPO_DIR}/go.sum /
+RUN --mount=type=ssh go mod download
 
-# Install Python requirements
-RUN pip install --no-cache-dir requests==2.32.2
+COPY ${REPO_DIR} .
 
-# Ensure Makefile is executable
-RUN chmod +x Makefile
-
-# Run make start and log client.yml
-CMD make start && \
-    echo "================ CLIENT.YML CONTENT ================" && \
-    cat ./etc/client.yml && \
-    echo "==================================================="
+# build
+RUN --mount=type=ssh make deps CGO_ENABLED=0
+RUN --mount=type=ssh make build CGO_ENABLED=0
+RUN rsync -a bin/ /bin/
